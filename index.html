@@ -188,22 +188,38 @@
             color: #6c757d;
             margin-bottom: 15px;
         }
+        .auto-save-msg {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 13px;
+            color: #28a745;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
     </style>
 </head>
 <body>
 
-    <h1 class="header-title">Montagem de Horário Interativa - Letras Inglês</h1>
+    <h1 class="header-title">Montagem de Horário Interativa - Letras-Inglês (Multiplataforma)</h1>
     
     <div class="controls-top">
         <button id="btn-all" class="filter-btn active" onclick="filterSemester('all')">Todos os Períodos</button>
-        <button id="btn-impar" class="filter-btn" onclick="filterSemester('impar')">Semestre Ímpar (1º, 3º, 5º, 7º)</button>
-        <button id="btn-par" class="filter-btn" onclick="filterSemester('par')">Semestre Par (2º, 4º, 6º, 8º)</button>
+        <button id="btn-impar" class="filter-btn" onclick="filterSemester('impar')">Semestre Ímpar</button>
+        <button id="btn-par" class="filter-btn" onclick="filterSemester('par')">Semestre Par</button>
         
         <div style="border-left: 2px solid #ccc; margin: 0 10px;"></div>
         
-        <button class="filter-btn" style="background:#28a745;color:white;border:none;" onclick="importDisciplines()">Importar Disciplinas Visíveis</button>
-        <button class="filter-btn" style="background:#dc3545;color:white;border:none;" onclick="clearGrid()">Limpar Grade Visível</button>
-        <button class="filter-btn" style="background:#17a2b8;color:white;border:none;" onclick="exportToExcel()">Exportar XLSX</button>
+        <button class="filter-btn" style="background:#28a745;color:white;border:none;" onclick="importDisciplines()" title="Lança as disciplinas nas colunas livres">📥 Auto-Completar</button>
+        <button class="filter-btn" style="background:#17a2b8;color:white;border:none;" onclick="exportToExcel()">📊 Exportar XLSX</button>
+        
+        <div style="border-left: 2px solid #ccc; margin: 0 10px;"></div>
+
+        <button class="filter-btn" style="background:#ffc107;color:#333;border:none;" onclick="exportProgress()" title="Baixa o seu progresso num arquivo pequeno para abrir no celular ou em outro PC">💾 Baixar Progresso (.json)</button>
+        <button class="filter-btn" style="background:#6f42c1;color:white;border:none;" onclick="importProgress()" title="Carrega um arquivo .json salvo anteriormente">📂 Carregar Progresso</button>
+        <button class="filter-btn" style="background:#dc3545;color:white;border:none;" onclick="clearMemory()">🧹 Limpar Tudo</button>
+        
+        <span id="save-msg" class="auto-save-msg">✓ Salvo no navegador local</span>
     </div>
 
     <div class="app-container">
@@ -326,9 +342,7 @@
         ];
 
         const professores = [
-            "Profª. Dr.ª Gabriela Sá Pauka",
-            "Profª. Dr.ª Ilka Mota de Oliveira",
-            "Prof. Dr. Rodrigo Moreira",
+            "Prof. Dr. Bruno Figueiredo",
             "Profª. Drª Maria Máximo",
             "Prof. Dr. Ederson Lauri",
             "Profª. Drª Adailde Miranda",
@@ -338,8 +352,9 @@
             "Prof. Dr. Wendell Fiori",
             "Profª. Drª Márcia Moret",
             "Prof. Dr. Luciano Magalhães",
-            "Prof. Dr. Bruno Figueiredo",
             "Prof. Substituto",
+            "Profª. M.ª Gabriela Sá Pauka",
+            "Profª. M.ª Ilka Mota de Oliveira"
         ];
 
         function generateId() {
@@ -406,8 +421,6 @@
             gridBody.appendChild(tr);
         }
 
-        renderDisciplines('all');
-
         function filterSemester(type) {
             document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById('btn-' + type).classList.add('active');
@@ -427,13 +440,13 @@
             });
         }
 
-        function createChipElement(type, name, ch) {
+        function createChipElement(type, name, ch, id = null) {
             const chip = document.createElement('div');
             chip.className = `chip ${type}`;
             chip.dataset.type = type;
             chip.dataset.name = name;
             chip.dataset.ch = ch;
-            chip.id = generateId();
+            chip.id = id || generateId();
             chip.draggable = true;
             
             chip.ondragstart = function(e) {
@@ -443,7 +456,7 @@
             let label = name;
             if(type === 'discipline') label += ` (${ch}h)`;
 
-            chip.innerHTML = `${label} <span onclick="this.parentElement.remove(); updateSummary();" title="Remover">&times;</span>`;
+            chip.innerHTML = `${label} <span onclick="this.parentElement.remove(); updateSummary(); saveToLocalStorage();" title="Remover">&times;</span>`;
             return chip;
         }
 
@@ -499,6 +512,7 @@
                 }
 
                 updateSummary();
+                saveToLocalStorage();
             }
         }
 
@@ -532,19 +546,20 @@
                 }
             });
             updateSummary();
+            saveToLocalStorage();
         }
 
         function clearGrid() {
-            if(!confirm("Tem certeza que deseja limpar as células das linhas que estão sendo exibidas?")) return;
+            if(!confirm("Tem certeza que deseja limpar a grade e apagar os dados salvos no navegador?")) return;
             
             const rows = document.querySelectorAll('#grid-body tr');
             rows.forEach(row => {
-                if (row.style.display !== 'none') {
-                    const cells = row.querySelectorAll('.schedule-cell');
-                    cells.forEach(cell => cell.innerHTML = '');
-                }
+                const cells = row.querySelectorAll('.schedule-cell');
+                cells.forEach(cell => cell.innerHTML = '');
             });
+            
             updateSummary();
+            localStorage.removeItem('letrasScheduleState');
         }
 
         function updateSummary() {
@@ -655,6 +670,136 @@
 
             XLSX.writeFile(wb, "Horarios_Letras_Ingles_UNIR.xlsx");
         }
+
+        let saveTimeout;
+        
+        function saveToLocalStorage() {
+            const gridData = [];
+            const rows = document.querySelectorAll('#grid-body tr');
+            
+            rows.forEach(row => {
+                const rowData = [];
+                const cells = row.querySelectorAll('.schedule-cell');
+                cells.forEach(cell => {
+                    const cellData = [];
+                    cell.querySelectorAll('.chip').forEach(chip => {
+                        cellData.push({
+                            type: chip.dataset.type,
+                            name: chip.dataset.name,
+                            ch: chip.dataset.ch,
+                            id: chip.id
+                        });
+                    });
+                    rowData.push(cellData);
+                });
+                gridData.push(rowData);
+            });
+            
+            localStorage.setItem('letrasScheduleState', JSON.stringify(gridData));
+            
+            const msg = document.getElementById('save-msg');
+            msg.style.opacity = 1;
+            
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                msg.style.opacity = 0;
+            }, 2000);
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('letrasScheduleState');
+            if (saved) {
+                applyStateData(saved);
+            }
+        }
+        
+        function applyStateData(jsonString) {
+            try {
+                const gridData = JSON.parse(jsonString);
+                const rows = document.querySelectorAll('#grid-body tr');
+                
+                gridData.forEach((rowData, rowIndex) => {
+                    if(rows[rowIndex]) {
+                        const cells = rows[rowIndex].querySelectorAll('.schedule-cell');
+                        rowData.forEach((cellData, cellIndex) => {
+                            if(cells[cellIndex]) {
+                                cells[cellIndex].innerHTML = ''; 
+                                cellData.forEach(chipData => {
+                                    const newChip = createChipElement(chipData.type, chipData.name, chipData.ch, chipData.id);
+                                    cells[cellIndex].appendChild(newChip);
+                                });
+                            }
+                        });
+                    }
+                });
+                updateSummary();
+            } catch (e) {
+                alert("Erro ao carregar dados do arquivo. Certifique-se que o arquivo é válido.");
+            }
+        }
+
+        function exportProgress() {
+            saveToLocalStorage();
+            const data = localStorage.getItem('letrasScheduleState');
+            if (!data || data === "[[],[],[],[],[],[],[],[]]") {
+                alert("O quadro está vazio. Não há progresso para salvar.");
+                return;
+            }
+            const blob = new Blob([data], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "progresso_horario_letras.json";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importProgress() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = event => {
+                    const json = event.target.result;
+                    applyStateData(json);
+                    localStorage.setItem('letrasScheduleState', json);
+                    alert("Progresso carregado com sucesso!");
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function clearMemory() {
+            if(confirm("Isso apagará o horário de forma permanente da tela e da memória local. Deseja continuar?")) {
+                localStorage.removeItem('letrasScheduleState');
+                
+                const cells = document.querySelectorAll('.schedule-cell');
+                cells.forEach(cell => cell.innerHTML = '');
+                
+                updateSummary();
+                
+                const msg = document.getElementById('save-msg');
+                msg.textContent = "Memória apagada!";
+                msg.style.color = "#dc3545";
+                msg.style.opacity = 1;
+                setTimeout(() => {
+                    msg.style.opacity = 0;
+                    setTimeout(() => {
+                        msg.textContent = "✓ Salvo no navegador local";
+                        msg.style.color = "#28a745";
+                    }, 500);
+                }, 2000);
+            }
+        }
+
+        window.onload = function() {
+            renderDisciplines('all');
+            loadFromLocalStorage();
+        };
     </script>
 </body>
 </html>

@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Montagem de Horário - Letras-Inglês</title>
     
-    <!-- Bibliotecas externas: Fonte Inter, SheetJS (Excel) e Lucide Icons -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Bibliotecas externas: Fonte Inter, SheetJS (Excel), jsPDF, html2canvas, jspdf-autotable e Lucide Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     
     <style>
@@ -123,11 +125,83 @@
         
         .btn-auto { background: var(--pastel-mint); color: var(--text-mint); }
         .btn-export { background: var(--pastel-blue); color: var(--text-blue); }
+        .btn-pdf { background: #fee2e2; color: #991b1b; } 
         .btn-download { background: var(--pastel-yellow); color: var(--text-yellow); }
         .btn-upload { background: var(--pastel-lilac); color: var(--text-lilac); }
         .btn-clear { background: var(--pastel-rose); color: var(--text-rose); }
 
         .filter-btn i { width: 16px; height: 16px; }
+        
+        /* Estilos do Toggle Switch para o PDF */
+        .pdf-export-container {
+            display: flex;
+            align-items: center;
+            background: #fee2e2;
+            border-radius: 8px;
+            padding-right: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        
+        .pdf-export-container .btn-pdf {
+            border-radius: 8px 0 0 8px;
+            box-shadow: none;
+            margin-right: 8px;
+        }
+
+        .switch-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #991b1b;
+            font-weight: 500;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #f87171;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #ef4444;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(14px);
+        }
 
         .app-container {
             display: flex;
@@ -341,8 +415,8 @@
     
     <div class="controls-top">
         <button id="btn-all" class="filter-btn btn-tab active" onclick="filterSemester('all')">Todos os Períodos</button>
-        <button id="btn-impar" class="filter-btn btn-tab" onclick="filterSemester('impar')">Semestre Ímpar</button>
-        <button id="btn-par" class="filter-btn btn-tab" onclick="filterSemester('par')">Semestre Par</button>
+        <button id="btn-impar" class="filter-btn btn-tab" onclick="filterSemester('impar')">Semestre Ímpar (1º, 3º, 5º, 7º)</button>
+        <button id="btn-par" class="filter-btn btn-tab" onclick="filterSemester('par')">Semestre Par (2º, 4º, 6º, 8º)</button>
         
         <div class="divider"></div>
         
@@ -352,6 +426,19 @@
         <button class="filter-btn btn-export" onclick="exportToExcel()">
             <i data-lucide="file-spreadsheet"></i> Exportar XLSX
         </button>
+        
+        <div class="pdf-export-container">
+            <button class="filter-btn btn-pdf" onclick="exportToPDF()">
+                <i data-lucide="file-text"></i> Exportar PDF
+            </button>
+            <div class="switch-wrapper" title="Incluir Resumo de Carga Horária no PDF">
+                <span>Resumo CH</span>
+                <label class="switch">
+                    <input type="checkbox" id="include-summary-pdf" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
         
         <div class="divider"></div>
 
@@ -381,7 +468,7 @@
         <!-- Quadro Principal -->
         <div class="main-panel">
             <h2>Quadro de Horários</h2>
-            <table class="grid-table">
+            <table class="grid-table" id="horario-table">
                 <thead>
                     <tr>
                         <th>Período</th>
@@ -398,7 +485,7 @@
                 </tbody>
             </table>
 
-            <h2 style="margin-top: 20px;">Resumo por Docente</h2>
+            <h2 style="margin-top: 20px;">Carga Horária por Docente</h2>
             <table class="summary-table">
                 <thead>
                     <tr>
@@ -425,9 +512,10 @@
         // Inicializar ícones Lucide
         lucide.createIcons();
 
-        // SVG ícone de fechar (usado em elementos gerados dinamicamente via JS)
+        // SVG ícone de fechar
         const closeIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 
+        // Lista de Disciplinas Letras-Inglês (8 períodos)
         const disciplinas = [
             { p: 1, nome: "Metodologia da Produção Científica e Acadêmica", ch: 60 },
             { p: 1, nome: "Língua Inglesa I", ch: 60 },
@@ -496,12 +584,9 @@
         ];
 
         const professores = [
-            "Profª. Dr.ª Gabriela Sá Pauka",
-            "Profª. Dr.ª Ilka Mota de Oliveira",
-            "Prof. Dr. Rodrigo Moreira", 
             "Prof. Dr. Bruno Figueiredo",
             "Profª. Drª Maria Máximo",
-            "Prof. Dr. Márcia Patrícia",
+            "Prof. Dr. Ederson Lauri",
             "Profª. Drª Adailde Miranda",
             "Profª. Drª Maria Norma",
             "Profª. Drª Cláudia Justus",
@@ -509,7 +594,10 @@
             "Prof. Dr. Wendell Fiori",
             "Profª. Drª Márcia Moret",
             "Prof. Dr. Luciano Magalhães",
+            "Prof. Dr. Hugo Fotopoulos",
             "Prof. Substituto",
+            "Profª. M.ª Gabriela Sá Pauka",
+            "Profª. M.ª Ilka Mota de Oliveira"
         ];
 
         function generateId() {
@@ -561,10 +649,11 @@
         });
 
         const gridBody = document.getElementById('grid-body');
+        // Letras = 8 períodos
         for (let i = 1; i <= 8; i++) {
             const tr = document.createElement('tr');
             tr.dataset.period = i;
-            tr.innerHTML = `<td>${i}º Período</td>`;
+            tr.innerHTML = `<td>${i}º</td>`; 
             for(let j=0; j<6; j++){
                 const td = document.createElement('td');
                 td.className = 'schedule-cell';
@@ -617,7 +706,6 @@
         }
 
         function dragStartFromSidebar(ev) {
-            // Find the closest draggable item (in case they drag the icon inside it)
             const target = ev.target.closest('.draggable-item') || ev.target;
             ev.dataTransfer.setData("type", target.dataset.type);
             ev.dataTransfer.setData("name", target.dataset.name);
@@ -831,6 +919,176 @@
             XLSX.writeFile(wb, "Horarios_Letras_Ingles_UNIR.xlsx");
         }
 
+        // ==========================================
+        // LÓGICA DE EXPORTAÇÃO PARA PDF (jsPDF)
+        // ==========================================
+        async function exportToPDF() {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ orientation: "landscape" });
+                
+                const includeSummary = document.getElementById('include-summary-pdf').checked;
+
+                let semesterLabel = "Todos os Períodos";
+                const activeBtn = document.querySelector('.filter-btn.btn-tab.active');
+                if(activeBtn) semesterLabel = activeBtn.innerText;
+
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(14);
+                
+                try {
+                    const imgData = await getBase64ImageFromUrl('assets/logo_unir.png');
+                    if(imgData) {
+                        doc.addImage(imgData, 'PNG', 14, 10, 20, 25);
+                    }
+                } catch(e) {
+                    console.log("Logo não encontrada em 'assets/logo_unir.png'. Prosseguindo sem logo.");
+                }
+
+                doc.text("MINISTÉRIO DA EDUCAÇÃO", 140, 15, {align: "center"});
+                doc.text("FUNDAÇÃO UNIVERSIDADE FEDERAL DE RONDÔNIA - UNIR", 140, 22, {align: "center"});
+                doc.text("CURSO DE LETRAS-INGLÊS - ARIQUEMES", 140, 29, {align: "center"});
+                doc.text("ATRIBUIÇÃO DE DISCIPLINAS E HORÁRIO DE AULAS", 140, 36, {align: "center"});
+                
+                doc.setFontSize(11);
+                doc.setFont("helvetica", "normal");
+                doc.text(`Visualização: ${semesterLabel}`, 140, 43, {align: "center"});
+
+                const tableData = [];
+                const rows = document.querySelectorAll('#grid-body tr');
+                
+                rows.forEach(row => {
+                    if (row.style.display !== 'none') {
+                        const rowData = [];
+                        rowData.push(row.querySelector('td').innerText.trim());
+                        
+                        const cells = row.querySelectorAll('.schedule-cell');
+                        cells.forEach(cell => {
+                            const discs = Array.from(cell.querySelectorAll('.chip.discipline')).map(c => c.dataset.name);
+                            const chs = Array.from(cell.querySelectorAll('.chip.discipline')).map(c => c.dataset.ch);
+                            const profs = Array.from(cell.querySelectorAll('.chip.teacher')).map(c => c.dataset.name);
+                            
+                            let cellContent = "";
+                            if(discs.length > 0) {
+                                for(let k=0; k<discs.length; k++){
+                                    cellContent += discs[k] + "\n(" + chs[k] + "H)";
+                                    if(k < discs.length - 1) cellContent += "\n\n";
+                                }
+                            }
+                            if(profs.length > 0) {
+                                cellContent += "\n" + profs.join("\n");
+                            }
+                            rowData.push(cellContent.trim());
+                        });
+                        tableData.push(rowData);
+                    }
+                });
+
+                doc.autoTable({
+                    startY: 50,
+                    head: [["PERÍODO", "2ª FEIRA", "3ª FEIRA", "4ª FEIRA", "5ª FEIRA", "6ª FEIRA", "SÁBADO"]],
+                    body: tableData,
+                    theme: 'grid',
+                    headStyles: { 
+                        fillColor: [230, 230, 230], 
+                        textColor: [0, 0, 0],
+                        halign: 'center',
+                        valign: 'middle',
+                        fontStyle: 'bold',
+                        lineWidth: 0.1,
+                        lineColor: [0, 0, 0]
+                    },
+                    bodyStyles: {
+                        lineWidth: 0.1,
+                        lineColor: [0, 0, 0],
+                        valign: 'middle',
+                        halign: 'center',
+                        fontSize: 9
+                    },
+                    columnStyles: {
+                        0: { fontStyle: 'bold', halign: 'center', cellWidth: 20 }
+                    },
+                    styles: {
+                        overflow: 'linebreak',
+                        cellPadding: 3
+                    }
+                });
+
+                if (includeSummary) {
+                    const summaryData = [];
+                    const summaryRows = document.querySelectorAll('#summary-body tr');
+                    
+                    summaryRows.forEach(row => {
+                        const cols = row.querySelectorAll('td');
+                        if (cols.length === 3 && !cols[0].hasAttribute('colspan')) {
+                            const docente = cols[0].innerText.trim();
+                            const disciplinas = cols[1].innerText.trim(); 
+                            const ch = cols[2].innerText.trim();
+                            summaryData.push([docente, disciplinas, ch]);
+                        }
+                    });
+
+                    if (summaryData.length > 0) {
+                        doc.addPage();
+                        
+                        doc.setFontSize(14);
+                        doc.setFont("helvetica", "bold");
+                        doc.text("Carga Horária por Docente", 140, 20, {align: "center"});
+
+                        doc.autoTable({
+                            startY: 30,
+                            head: [["Docente", "Disciplinas Alocadas", "Carga Horária Total (CH)"]],
+                            body: summaryData,
+                            theme: 'grid',
+                            headStyles: {
+                                fillColor: [230, 230, 230],
+                                textColor: [0, 0, 0],
+                                fontStyle: 'bold',
+                                lineWidth: 0.1,
+                                lineColor: [0, 0, 0]
+                            },
+                            bodyStyles: {
+                                lineWidth: 0.1,
+                                lineColor: [0, 0, 0],
+                                valign: 'middle',
+                                fontSize: 10
+                            },
+                            columnStyles: {
+                                2: { fontStyle: 'bold', halign: 'center', cellWidth: 40 }
+                            },
+                            styles: {
+                                overflow: 'linebreak',
+                                cellPadding: 4
+                            }
+                        });
+                    }
+                }
+
+                doc.save(`Horarios_Letras_Ingles_${semesterLabel.replace(/\s+/g, '_')}.pdf`);
+            } catch (error) {
+                console.error("Erro ao gerar PDF:", error);
+                alert("Erro ao gerar PDF. Verifique o console do navegador.");
+            }
+        }
+
+        function getBase64ImageFromUrl(imageUrl) {
+            return new Promise((resolve, reject) => {
+                var img = new Image();
+                img.setAttribute('crossOrigin', 'anonymous');
+                img.onload = () => {
+                    var canvas = document.createElement("canvas");
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    var ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0);
+                    var dataURL = canvas.toDataURL("image/png");
+                    resolve(dataURL);
+                };
+                img.onerror = error => reject(error);
+                img.src = imageUrl;
+            });
+        }
+
         // --- Lógica de Salvamento e Exportação de Progresso (.json) ---
         let saveTimeout;
         
@@ -969,4 +1227,3 @@
     </script>
 </body>
 </html>
-

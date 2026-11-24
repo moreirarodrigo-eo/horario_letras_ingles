@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Montagem de Horário - Letras-Inglês</title>
     
-    <!-- Bibliotecas externas: Fonte Inter, SheetJS (Excel), jsPDF, html2canvas, jspdf-autotable e Lucide Icons -->
+    <!-- Bibliotecas externas: Fonte Inter, SheetJS (Excel), jsPDF, jspdf-autotable e Lucide Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -122,6 +122,17 @@
         /* Cores Específicas dos Botões */
         .btn-tab { border: 1px solid var(--border-color); }
         .btn-tab.active { background: var(--text-main); color: white; border-color: var(--text-main); }
+
+        .btn-toggle {
+            border: 1px solid var(--border-color);
+            background: var(--bg-panel);
+            color: var(--text-gray);
+        }
+        .btn-toggle.is-hidden {
+            background: var(--pastel-gray);
+            color: var(--text-muted);
+            border-style: dashed;
+        }
         
         .btn-auto { background: var(--pastel-mint); color: var(--text-mint); }
         .btn-export { background: var(--pastel-blue); color: var(--text-blue); }
@@ -218,6 +229,11 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+            flex-shrink: 0;
+        }
+
+        .sidebar.hidden {
+            display: none;
         }
 
         .main-panel {
@@ -419,6 +435,15 @@
         <button id="btn-par" class="filter-btn btn-tab" onclick="filterSemester('par')">Semestre Par (2º, 4º, 6º, 8º)</button>
         
         <div class="divider"></div>
+
+        <button id="btn-toggle-disc" class="filter-btn btn-toggle" onclick="toggleSidebar('disciplines')" title="Mostrar ou ocultar o menu lateral de Disciplinas">
+            <i data-lucide="panel-left-close"></i> Ocultar Disciplinas
+        </button>
+        <button id="btn-toggle-teach" class="filter-btn btn-toggle" onclick="toggleSidebar('teachers')" title="Mostrar ou ocultar o menu lateral de Docentes">
+            <i data-lucide="panel-right-close"></i> Ocultar Docentes
+        </button>
+
+        <div class="divider"></div>
         
         <button class="filter-btn btn-auto" onclick="importDisciplines()" title="Lança as disciplinas nas colunas livres">
             <i data-lucide="wand-2"></i> Auto-Completar
@@ -515,6 +540,27 @@
         // SVG ícone de fechar
         const closeIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 
+        // Alternar visibilidade dos menus laterais
+        function toggleSidebar(side) {
+            const isDisc = side === 'disciplines';
+            const sidebar = document.getElementById(isDisc ? 'disciplines-sidebar' : 'teachers-sidebar');
+            const btn = document.getElementById(isDisc ? 'btn-toggle-disc' : 'btn-toggle-teach');
+            const isHidden = sidebar.classList.toggle('hidden');
+
+            btn.classList.toggle('is-hidden', isHidden);
+
+            if (isDisc) {
+                btn.innerHTML = isHidden
+                    ? '<i data-lucide="panel-left-open"></i> Mostrar Disciplinas'
+                    : '<i data-lucide="panel-left-close"></i> Ocultar Disciplinas';
+            } else {
+                btn.innerHTML = isHidden
+                    ? '<i data-lucide="panel-right-open"></i> Mostrar Docentes'
+                    : '<i data-lucide="panel-right-close"></i> Ocultar Docentes';
+            }
+            lucide.createIcons();
+        }
+
         // Lista de Disciplinas Letras-Inglês (8 períodos)
         const disciplinas = [
             { p: 1, nome: "Metodologia da Produção Científica e Acadêmica", ch: 60 },
@@ -596,8 +642,8 @@
             "Profª. Drª Márcia Moret",
             "Profª. Drª Márcia Patrícia",
             "Prof. Dr. Luciano Magalhães",
-            "Prof. Voluntário",
-
+            "Prof. Dr. Rodrigo Moreira",
+            "Prof. Voluntário"
         ];
 
         function generateId() {
